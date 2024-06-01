@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import pandas as pd
+from tkcalendar import DateEntry
 import random
 from threading import Timer
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -137,7 +138,7 @@ tree.pack(expand=1, fill='both')
 entry_frame = ttk.Frame(budget_tab)
 entry_frame.pack(fill='x', padx=10, pady=10)
 
-date_entry = ttk.Entry(entry_frame)
+date_entry = DateEntry(entry_frame, width=12, background='darkblue', foreground='white', borderwidth=2)
 description_entry = ttk.Entry(entry_frame)
 category_entry = ttk.Entry(entry_frame)
 amount_entry = ttk.Entry(entry_frame)
@@ -147,10 +148,11 @@ description_entry.grid(row=1, column=1, padx=5, pady=5)
 category_entry.grid(row=2, column=1, padx=5, pady=5)
 amount_entry.grid(row=3, column=1, padx=5, pady=5)
 
-ttk.Label(entry_frame, text="Date:").grid(row=0, column=0, sticky='e')
-ttk.Label(entry_frame, text="Description:").grid(row=1, column=0, sticky='e')
-ttk.Label(entry_frame, text="Category:").grid(row=2, column=0, sticky='e')
-ttk.Label(entry_frame, text="Amount:").grid(row=3, column=0, sticky='e')
+ttk.Label(entry_frame, text="Date:").grid(row=0, column=0, padx=(0, 5), sticky='e')
+ttk.Label(entry_frame, text="Description:").grid(row=1, column=0, padx=(0, 5), sticky='e')
+ttk.Label(entry_frame, text="Category:").grid(row=2, column=0, padx=(0, 5), sticky='e')
+ttk.Label(entry_frame, text="Amount:").grid(row=3, column=0, padx=(0, 5), sticky='e')
+
 
 def add_expense():
     global expense_df
@@ -487,6 +489,7 @@ def display_article(content, quiz):
         ttk.Radiobutton(literacy_tab, text=option, variable=quiz_var, value=option).pack(anchor=tk.W)
     
     def check_answer():
+        global incorrect_attempt
         if quiz_var.get() == quiz["answer"]:
             ttk.Label(literacy_tab, text="Correct!", foreground="green").pack(pady=5)
         else:
@@ -496,6 +499,7 @@ def display_article(content, quiz):
 
     back_button = ttk.Button(literacy_tab, text="Back", command=lambda: display_articles())
     back_button.pack(pady=10)
+
 
 def display_articles():
     for widget in literacy_tab.winfo_children():
@@ -507,6 +511,7 @@ def display_articles():
         button = ttk.Button(literacy_tab, text=article["title"], command=lambda a=article: display_article(a["content"], a["quiz"]))
         button.pack(pady=5)
 
+
 display_articles()
 
 # Goals listbox
@@ -515,6 +520,8 @@ goals_listbox = tk.Listbox(goals_tab)
 goals_listbox.pack(expand=1, fill='both', padx=10, pady=10)
 
 # Function to start the game
+
+
 def start_game():
     game_window = tk.Toplevel(root)
     game_window.title("Guess the Number Game")
