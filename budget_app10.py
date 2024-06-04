@@ -7,6 +7,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import ttkbootstrap as ttkb
 from ttkbootstrap.constants import *
 from tkinter import filedialog
+import pdfplumber
+import re
 
 # Initialize the main window with ttkbootstrap style
 root = ttkb.Window(themename="cosmo")
@@ -170,19 +172,41 @@ def add_expense():
 add_expense_button = ttk.Button(expense_entry_frame, text="Add Expense", bootstyle=SUCCESS, command=add_expense)
 add_expense_button.grid(row=4, columnspan=2, pady=10)
 
+def extract_text_from_pdf(pdf_path):
+    text = ""
+    with pdfplumber.open(pdf_path) as pdf:
+        for page in pdf.pages:
+            text += page.extract_text()
+    pattern = r'(\d{2}/\d{2})\s([A-Z]+[\w*\s-]+)\s(\d+\.\d{2})'
+    matches = re.findall(pattern, text)
+    return matches
+
 # Function to import expenses from CSV
 def import_expenses():
     global expense_df
-    file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
+    file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
     if file_path:
-        new_expenses = pd.read_csv(file_path)
-        # Ensure Date column is in datetime format
-        new_expenses["Date"] = pd.to_datetime(new_expenses["Date"], errors='coerce')
-        new_expenses["Category"] = new_expenses["Category"].apply(lambda x: x if x in average_limits else "Other")
-        expense_df = pd.concat([expense_df, new_expenses], ignore_index=True)
-        # Refresh the expense treeview
-        refresh_expense_treeview()
-        # Recalculate financial statements and savings suggestions
+        pdf_text = extract_text_from_pdf(file_path)
+        
+        # Assuming the PDF text is in a format where each expense is represented as a tuple
+        # (date, description, amount)
+        expenses = extract_text_from_pdf(file_path)
+        
+        for expense in expenses:
+            date_value, description_value, amount_value = expense
+            
+            # Append expense to the DataFrame
+            new_expense = pd.DataFrame({
+                "Date": [pd.to_datetime(date_value, errors='coerce')],
+                "Description": [description_value],
+                "Amount": [float(amount_value)]
+            })
+            expense_df = pd.concat([expense_df, new_expense], ignore_index=True)
+            
+            # Insert expense into the expense_tree
+            expense_tree.insert("", "end", values=(date_value, description_value, "", f'${amount_value}'))
+        
+        # Recalculate financial statements and savings suggestions after adding all expenses
         update_financial_statements()
         calculate_savings_suggestions()
 
