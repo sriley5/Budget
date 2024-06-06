@@ -648,6 +648,7 @@ update_financial_statements()
 # Savings Tab Layout
 ttk.Label(savings_tab, text="Savings Suggestions", font=("Arial", 14, "bold")).pack(pady=10)
 
+# Treeview with a new 'Action' column
 savings_tree = ttk.Treeview(savings_tab, columns=("Category", "Average Spent", "Suggestion", "Action"), show='headings')
 savings_tree.heading("Category", text="Category")
 savings_tree.heading("Average Spent", text="Average Spent")
@@ -659,6 +660,12 @@ for col in ("Category", "Average Spent", "Suggestion", "Action"):
 
 savings_tree.pack(expand=1, fill='both', padx=10, pady=10)
 
+# Potential savings label, initially hidden
+potential_savings_label = ttk.Label(savings_tab, text="", font=("Arial", 12, "bold"))
+potential_savings_label.pack(pady=10)
+
+accepted_goals = []
+
 def add_goal_from_suggestion(goal):
     goals_listbox.insert(tk.END, goal)
 
@@ -667,37 +674,61 @@ def accept_suggestion(item):
     category, avg_spent, suggestion = values[:3]
     goal = f"Reduce spending in {category}: {suggestion}"
     add_goal_from_suggestion(goal)
+    accepted_goals.append(category)
     savings_tree.delete(item)
 
 def decline_suggestion(item):
     savings_tree.delete(item)
+
+def create_action_buttons(item):
+    action_frame = ttk.Frame(savings_tree)
+    accept_button = ttk.Button(action_frame, text="Accept", command=lambda i=item: accept_suggestion(i))
+    decline_button = ttk.Button(action_frame, text="Decline", command=lambda i=item: decline_suggestion(i))
+    accept_button.pack(side="left", padx=5)
+    decline_button.pack(side="left", padx=5)
+    savings_tree.set(item, column="Action", value="")
+    action_frame.update_idletasks()
+    bbox = savings_tree.bbox(item, "Action")
+    if bbox:
+        action_frame.place(x=bbox[0], y=bbox[1], anchor="nw")
 
 def calculate_savings_suggestions():
     # Clear existing suggestions
     for item in savings_tree.get_children():
         savings_tree.delete(item)
 
+    total_savings = 0
+
     # Calculate average spending and provide suggestions
     for category, limit in average_limits.items():
         avg_spent = expense_df[expense_df["Category"].str.lower() == category.lower()]["Amount"].mean()
         if pd.notna(avg_spent) and avg_spent > limit:
             suggestion = savings_suggestions.get(category, "Consider ways to reduce spending in this category.")
+            total_savings += (avg_spent - limit)
+
             item = savings_tree.insert("", "end", values=(category, f"${avg_spent:.2f}", suggestion, ""))
-            action_frame = ttk.Frame(savings_tab)
-            accept_button = ttk.Button(action_frame, text="Accept", bootstyle=SUCCESS, command=lambda i=item: accept_suggestion(i))
-            decline_button = ttk.Button(action_frame, text="Decline", bootstyle=DANGER, command=lambda i=item: decline_suggestion(i))
-            action_frame.pack()
-            accept_button.pack(side="left")
-            decline_button.pack(side="left")
-            savings_tree.set(item, "Action", action_frame)
 
-calculate_savings_suggestions_button = ttk.Button(savings_tab, text="Calculate Savings Suggestions", bootstyle=SUCCESS, command=calculate_savings_suggestions)
-calculate_savings_suggestions_button.pack(pady=10)
+            # Create a frame to hold the buttons
+            buttons_frame = ttk.Frame(savings_tab)
+            accept_button = ttk.Button(buttons_frame, text="Accept", command=lambda i=item: accept_suggestion(i))
+            decline_button = ttk.Button(buttons_frame, text="Decline", command=lambda i=item: decline_suggestion(i))
+            accept_button.pack(side="left", padx=5)
+            decline_button.pack(side="left", padx=5)
 
-# Calculate savings suggestions based on sample data
+            savings_tree.update_idletasks()
+            win = savings_tree.bbox(item, column="Action")
+            if win:
+                buttons_frame.place(x=win[0], y=win[1], anchor="nw")
+
+    potential_savings_label.config(text=f"Potential Total Savings: ${total_savings:.2f}")
+
+# Automatically calculate savings suggestions
 calculate_savings_suggestions()
 
 # Goals from savings
+goals_frame = ttk.Frame(savings_tab)
+goals_frame.pack(expand=1, fill='both', padx=10, pady=10)
+
 ttk.Label(goals_frame, text="Goals Added from Savings", font=("Arial", 12, "bold")).pack(pady=10)
 
 goals_listbox = tk.Listbox(goals_frame)
@@ -706,11 +737,6 @@ goals_listbox.pack(expand=1, fill='both')
 # Function to add goals to the listbox
 def add_goal(goal):
     goals_listbox.insert(tk.END, goal)
-
-# Example of adding a goal (this should be replaced with actual logic)
-add_goal("Save $1000 for Emergency Fund")
-
-
 
 # Start the main loop
 root.mainloop()
