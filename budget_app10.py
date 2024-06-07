@@ -32,6 +32,75 @@ notebook.add(income_distribution_tab, text="Income Distribution")
 notebook.add(financial_plan_tab, text="Financial Planning")
 notebook.add(savings_tab, text="Savings Suggestions")
 
+keywords = {
+    "Dining Out": [
+        "restaurant", "cafe", "bistro", "diner", "eatery", "bar", "grill", "deli", "pizza", "sushi", "burger", "taco", "steakhouse", "pub",
+        "brunch", "dinner", "lunch", "breakfast", "buffet", "food truck", "takeout", "delivery", "fast food", "catering", "meal", "subway",
+        "chipotle", "doordash", "grubhub", "ubereats", "wendy's", "mcdonald's", "kfc", "burger king", "taco bell", "panda express", "Red Lion",
+        "Five guys", "Famiglia", "Strokos", "Gourmet", "Just Salad", "Dig Inn", "Raising Canes", "Carmines", "Happy Hot Hunan"
+    ],
+    "Groceries": [
+        "supermarket", "grocery", "market", "store", "bakery", "butcher", "farmers market", "produce", "vegetables", "fruits", "meat", "fish",
+        "seafood", "dairy", "organic", "whole foods", "costco", "walmart", "trader joe's", "aldi", "safeway", "kroger", "publix", "target",
+        "food", "beverage", "milk", "bread", "eggs", "cereal", "snacks", "drinks"
+    ],
+    "Transportation": [
+        "uber", "lyft", "taxi", "bus", "metro", "subway", "train", "tram", "ferry", "flight", "airline", "airport", "gas", "fuel", "petrol",
+        "diesel", "electric vehicle", "toll", "parking", "car rental", "auto", "vehicle", "maintenance", "repair", "oil change", "tires",
+        "brake", "car wash", "registration", "license", "insurance"
+    ],
+    "Healthcare": [
+        "hospital", "clinic", "doctor", "physician", "dentist", "orthodontist", "optometrist", "pharmacy", "medication", "drug", "prescription",
+        "insurance", "copay", "therapy", "counseling", "mental health", "chiropractor", "urgent care", "emergency", "surgery", "lab test",
+        "diagnostic", "nursing", "vaccination", "medical", "health", "wellness", "fitness"
+    ],
+    "Fitness": [
+        "gym", "fitness", "workout", "exercise", "yoga", "pilates", "crossfit", "zumba", "spin class", "personal trainer", "membership",
+        "health club", "sports", "athletic", "run", "jog", "swim", "bike", "hike", "climb", "martial arts", "boxing", "kickboxing", "gym pass",
+        "planet fitness", "24 hour fitness", "la fitness", "equinox", "gold's gym"
+    ],
+    "Entertainment": [
+        "movie", "cinema", "theater", "concert", "show", "event", "ticket", "festival", "amusement park", "theme park", "museum", "exhibit",
+        "gallery", "club", "nightclub", "bar", "pub", "game", "sports", "match", "play", "opera", "ballet", "circus", "streaming", "netflix",
+        "hulu", "spotify", "apple music", "amazon prime", "disney+", "concert", "broadway", "Regal", "AMC", "Ba", "Palace", "Carrol's Place",
+        "The Box"
+    ],
+    "Utilities": [
+        "electricity", "water", "gas", "sewer", "trash", "recycling", "internet", "cable", "satellite", "phone", "mobile", "cell", "bill",
+        "payment", "utility", "power", "heat", "cooling", "wifi", "landline", "fiber", "telecom"
+    ],
+    "Subscriptions": [
+        "subscription", "membership", "service", "streaming", "netflix", "hulu", "amazon prime", "disney+", "spotify", "apple music",
+        "magazine", "newspaper", "gym", "club", "box", "kit", "meal plan", "software", "app", "siriusxm", "adobe", "microsoft office",
+        "cloud storage", "new york times", "washington post", "subcripti"
+    ],
+    "Education": [
+        "tuition", "school", "college", "university", "course", "class", "lesson", "workshop", "seminar", "textbook", "book", "lab fee",
+        "application fee", "student loan", "scholarship", "grant", "degree", "diploma", "certificate", "training", "education", "online course",
+        "edx", "coursera", "udemy", "khan academy", "tutor"
+    ],
+    "Travel": [
+        "hotel", "motel", "inn", "bnb", "airbnb", "hostel", "resort", "vacation", "travel", "trip", "flight", "airline", "cruise", "tour",
+        "rental car", "taxi", "ride share", "bus", "train", "subway", "metro", "public transport", "luggage", "passport", "visa", "booking",
+        "reservation", "expedia", "booking.com", "tripadvisor", "trivago", "kayak", "Mta"
+    ],
+    "Shopping": [
+        "store", "shop", "mall", "outlet", "boutique", "market", "bazaar", "online shopping", "e-commerce", "amazon", "ebay", "etsy", "walmart",
+        "target", "costco", "retail", "sale", "discount", "deal", "clothing", "apparel", "fashion", "accessories", "jewelry", "shoes",
+        "electronics", "appliances", "furniture", "home decor", "beauty", "cosmetics", "health", "wellness", "sports", "outdoor", "pet supplies",
+        "toys", "games", "hobbies", "books", "music", "movies", "video games", "software", "ikea", "best buy", "home depot", "lowe's", "Amzn", "Marketplace",
+        "Duane Reade", "CVS"
+    ],
+    # Add more categories and keywords as needed
+}
+
+def categorize_expense(description):
+    for category, kw_list in keywords.items():
+        if any(keyword in description.lower() for keyword in kw_list):
+            return category
+    return "Miscellaneous"
+
+
 # Define average limits for categories and suggestions
 average_limits = {
     "Groceries": 200,
@@ -160,7 +229,7 @@ def add_expense():
         expense_date_entry.delete(0, tk.END)
         expense_description_entry.delete(0, tk.END)
         expense_category_entry.set("")
-        expense_amount_entry.delete(0, tk.END)
+        expense_amount_entry.delete(0, expense_amount_entry.delete(0, tk.END))
 
         # Recalculate financial statements and savings suggestions each time an expense is added
         update_financial_statements()
@@ -194,17 +263,19 @@ def import_expenses():
         
         for expense in expenses:
             date_value, description_value, amount_value = expense
+            category_value = categorize_expense(description_value)
             
             # Append expense to the DataFrame
             new_expense = pd.DataFrame({
                 "Date": [pd.to_datetime(date_value, errors='coerce')],
                 "Description": [description_value],
+                "Category": [category_value],
                 "Amount": [float(amount_value)]
             })
             expense_df = pd.concat([expense_df, new_expense], ignore_index=True)
             
             # Insert expense into the expense_tree
-            expense_tree.insert("", "end", values=(date_value, description_value, "", f'${amount_value}'))
+            expense_tree.insert("", "end", values=(date_value, description_value, category_value, f'${amount_value}'))
         
         # Recalculate financial statements and savings suggestions after adding all expenses
         update_financial_statements()
@@ -391,7 +462,7 @@ def show_distribution_popup():
         expense_entries.append(entry)
 
     # Income Distribution
-    distribution_frame =    ttk.Frame(popup)
+    distribution_frame = ttk.Frame(popup)
     distribution_frame.pack(fill='x', padx=10, pady=10)
 
     investment_categories = ["Savings", "Stocks", "Fixed-Income Stocks", "Bonds", "Retirement", "Checking", "Real Estate"]
@@ -480,7 +551,7 @@ financial_plan_canvas.pack(side="left", fill="both", expand=True)
 financial_plan_scrollbar.pack(side="right", fill="y")
 
 financial_plan_frame = ttk.Frame(financial_plan_scrollable_frame)
-financial_plan_frame.pack(expand=1, fill='both', padx=10, pady=10)
+financial_plan_frame.pack(expand=1, fill='both', padx=70, pady=10)  # Increased padx for more centering
 
 # Add section title
 ttk.Label(financial_plan_frame, text="Financial Planning", font=("Arial", 14, "bold")).pack(pady=10)
@@ -569,20 +640,37 @@ def update_financial_statements():
         income_statement_tree.insert("", "end", values=list(row))
     income_statement_tree.pack(expand=1, fill='both')
 
-    # Predicted Wealth Line Graph
+        # Predicted Wealth Line Graph
     def calculate_predicted_wealth():
+        # Calculate total principal
         principal = sum(distribution_df["Amount"])
         predicted_wealth = [principal]
         months = [datetime.now().strftime("%B %Y")]
+
+        # Calculate average monthly expenses
+        average_monthly_expense = expense_df.resample('M', on='Date')["Amount"].sum().mean()
+
+        # Calculate total recurring income per month
+        recurring_salaries = income_df[income_df["Recurring"] != "None"]
+        recurring_income = 0
+
+        for _, row in recurring_salaries.iterrows():
+            frequency = row["Recurring"]
+            if frequency == "Weekly":
+                recurring_income += row["Amount"] * 4
+            elif frequency == "Bi-Weekly":
+                recurring_income += row["Amount"] * 2
+            elif frequency == "Monthly":
+                recurring_income += row["Amount"]
 
         for month in range(1, 13):
             month_growth = 0
             for _, row in distribution_df.iterrows():
                 rate = row['InterestRate'] / 100 if 'InterestRate' in row and not pd.isna(row['InterestRate']) else 0
                 amount = row['Amount']
-                growth = amount * (1 + rate / 12) - amount  # Monthly growth
+                growth = amount * (rate / 12)  # Monthly growth
                 month_growth += growth
-            principal += month_growth - sum(expense_df["Amount"])
+            principal += month_growth + recurring_income - average_monthly_expense
             months.append((datetime.now() + timedelta(days=30 * month)).strftime("%B %Y"))
             predicted_wealth.append(principal)
         
@@ -594,16 +682,17 @@ def update_financial_statements():
     ax.plot(months, predicted_wealth, label="Predicted Wealth", marker='o')
     for i, value in enumerate(predicted_wealth):
         ax.annotate(f"${value:.2f}", (months[i], predicted_wealth[i]), textcoords="offset points", xytext=(0, 10), ha='center')
-    ax.set_xlabel("Month-Year")
-    ax.set_ylabel("Value ($)")
-    ax.set_title("Predicted Wealth")
-    ax.legend()
+    ax.set_xlabel("Month-Year", fontsize=4)
+    ax.set_ylabel("Value ($)", fontsize=6)
+    ax.set_title("Predicted Wealth", fontsize=8)
+    ax.legend(fontsize=6)  # Decreased legend font size
     fig.tight_layout()  # Adjust layout to prevent clipping
-    ax.tick_params(axis='x', rotation=45)  # Rotated x-axis labels for better readability
+    ax.tick_params(axis='x', rotation=90, labelsize=4)  # Vertically aligned x-axis labels for better readability and smaller font size
 
     canvas = FigureCanvasTkAgg(fig, master=predicted_wealth_container)
     canvas.get_tk_widget().pack(expand=1, fill='both')
     canvas.draw()
+
 
     # Expense Pie Chart
     if not expense_df.empty:
@@ -629,21 +718,32 @@ def update_financial_statements():
         fig, ax = plt.subplots(figsize=(6, 3))  # Adjusted size for better visibility
         ax.scatter(categories, avg_values, label='Average Spent')
         ax.scatter(categories, upper_limits, label='Upper Limit', color='r')
-        for i, txt in enumerate(avg_values):
-            ax.annotate(f"${txt:.2f}", (categories[i], avg_values[i]), textcoords="offset points", xytext=(0, 10), ha='center')
-        ax.set_xlabel("Categories")
-        ax.set_ylabel("Amount ($)")
-        ax.set_title("Average Expenses vs Upper Limits")
-        ax.legend()
+        ax.set_xlabel("Categories", fontsize=5)
+        ax.set_ylabel("Amount ($)", fontsize=6)
+        ax.set_title("Average Expenses vs Upper Limits", fontsize=8)
+        ax.legend(fontsize=6)  # Decreased legend font size
         fig.tight_layout()  # Adjust layout to prevent clipping
-        ax.tick_params(axis='x', rotation=45)  # Rotated x-axis labels for better readability
+        ax.tick_params(axis='x', rotation=90, labelsize=4)  # Vertically aligned x-axis labels for better readability and smaller font size
 
         canvas = FigureCanvasTkAgg(fig, master=scatter_plot_container)
         canvas.get_tk_widget().pack(expand=1, fill='both')
         canvas.draw()
 
+
 # Call update_financial_statements initially to populate the financial planning tab
 update_financial_statements()
+
+# Ensure expenses without a year are assumed to belong to the current year
+def extract_text_from_pdf(pdf_path):
+    text = ""
+    with pdfplumber.open(pdf_path) as pdf:
+        for page in pdf.pages:
+            text += page.extract_text()
+    pattern = r'(\d{2}/\d{2})\s([A-Z]+[\w*\s-]+)\s(\d+\.\d{2})'
+    matches = re.findall(pattern, text)
+    current_year = datetime.now().year
+    return [(f"{date}/{current_year}", desc, amount) for date, desc, amount in matches]
+
 
 # Savings Tab Layout
 ttk.Label(savings_tab, text="Savings Suggestions", font=("Arial", 14, "bold")).pack(pady=10)
@@ -740,8 +840,5 @@ def add_goal(goal):
 
 # Start the main loop
 root.mainloop()
-
-
-
 
 
