@@ -9,6 +9,7 @@ from ttkbootstrap.constants import *
 from tkinter import filedialog
 import pdfplumber
 import re
+import calendar
 
 # Initialize the main window with ttkbootstrap style
 root = ttkb.Window(themename="cosmo")
@@ -22,16 +23,148 @@ notebook.pack(expand=1, fill='both')
 # Create tabs
 expense_tab = ttk.Frame(notebook)
 income_tab = ttk.Frame(notebook)
-income_distribution_tab = ttk.Frame(notebook)
+asset_allocation_tab = ttk.Frame(notebook)
 financial_plan_tab = ttk.Frame(notebook)
 savings_tab = ttk.Frame(notebook)
 
 notebook.add(expense_tab, text="Expenses")
 notebook.add(income_tab, text="Income")
-notebook.add(income_distribution_tab, text="Income Distribution")
+notebook.add(asset_allocation_tab, text="Asset Allocation")
 notebook.add(financial_plan_tab, text="Financial Planning")
 notebook.add(savings_tab, text="Savings Suggestions")
 
+# Add sub-tabs within the Financial Planning tab
+financial_plan_notebook = ttk.Notebook(financial_plan_tab)
+financial_plan_notebook.pack(expand=1, fill='both')
+
+analytics_tab = ttk.Frame(financial_plan_notebook)
+investments_tab = ttk.Frame(financial_plan_notebook)
+calendar_tab = ttk.Frame(financial_plan_notebook)
+
+financial_plan_notebook.add(analytics_tab, text="Analytics")
+financial_plan_notebook.add(investments_tab, text="Investments")
+financial_plan_notebook.add(calendar_tab, text="Calendar")
+
+# Center the tabs within the financial_plan_notebook
+for tab in [analytics_tab, investments_tab, calendar_tab]:
+    tab.grid_columnconfigure(0, weight=1)
+    tab.grid_rowconfigure(0, weight=1)
+
+class CustomCalendar(ttk.Frame):
+    def __init__(self, parent=None, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.cal = calendar.TextCalendar(calendar.SUNDAY)
+        self.year = datetime.now().year
+        self.month = datetime.now().month
+        self.payments = {}
+        self.build_calendar()
+
+    def build_calendar(self):
+        for widget in self.winfo_children():
+            widget.destroy()
+        header = ttk.Frame(self)
+        header.pack(fill='x')
+
+        prev_btn = ttk.Button(header, text="<", command=self.prev_month)
+        prev_btn.pack(side='left')
+        next_btn = ttk.Button(header, text=">", command=self.next_month)
+        next_btn.pack(side='right')
+
+        month_year_lbl = ttk.Label(header, text=f"{calendar.month_name[self.month]} {self.year}", font=("Arial", 24))
+        month_year_lbl.pack(side='top')
+
+        cal_frame = ttk.Frame(self)
+        cal_frame.pack(fill='both', expand=True)
+
+        # Configure column and row weights for expansion
+        for i in range(7):
+            cal_frame.columnconfigure(i, weight=1)
+        for i in range(6):  # Maximum 6 rows in a month view
+            cal_frame.rowconfigure(i, weight=1)
+
+        days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        for day in days:
+            ttk.Label(cal_frame, text=day, font=("Arial", 24)).grid(row=0, column=days.index(day), sticky="nsew")
+
+        month_days = self.cal.monthdayscalendar(self.year, self.month)
+        for row, week in enumerate(month_days, 1):
+            for col, day in enumerate(week):
+                if day != 0:
+                    day_frame = ttk.Frame(cal_frame, width=100, height=600, relief="ridge", borderwidth=1)
+                    day_frame.grid_propagate(False)
+                    day_frame.grid(row=row, column=col, sticky="nsew")
+                    day_lbl = ttk.Label(day_frame, text=str(day), font=("Arial", 24))
+                    day_lbl.pack(anchor='n', expand=True)
+                    if (self.year, self.month, day) in self.payments:
+                        payments = self.payments[(self.year, self.month, day)]
+                        for payment in payments:
+                            payment_lbl = ttk.Label(day_frame, text=f"{payment['description']}\n${payment['amount']}", font=("Arial", 16), foreground='blue')
+                            payment_lbl.pack(anchor='center')
+
+    def prev_month(self):
+        self.month -= 1
+        if self.month == 0:
+            self.month = 12
+            self.year -= 1
+        self.build_calendar()
+
+    def next_month(self):
+        self.month += 1
+        if self.month == 13:
+            self.month = 1
+            self.year += 1
+        self.build_calendar()
+
+    def add_payment(self, day, description, amount):
+        if (self.year, self.month, day) not in self.payments:
+            self.payments[(self.year, self.month, day)] = []
+        self.payments[(self.year, self.month, day)].append({"description": description, "amount": amount})
+        self.build_calendar()
+
+# Add custom calendar widget to calendar tab
+calendar_widget = CustomCalendar(calendar_tab)
+calendar_widget.pack(expand=1, fill='both')
+
+# Add payment feature
+def add_payment_popup():
+    popup = ttkb.Toplevel(root)
+    popup.title("Add Payment")
+    popup.geometry("400x300")
+
+    ttk.Label(popup, text="Date (MM/DD/YYYY):").pack(pady=5)
+    date_entry = ttk.Entry(popup)
+    date_entry.pack(pady=5)
+
+    ttk.Label(popup, text="Description:").pack(pady=5)
+    desc_entry = ttk.Entry(popup)
+    desc_entry.pack(pady=5)
+
+    ttk.Label(popup, text="Amount:").pack(pady=5)
+    amount_entry = ttk.Entry(popup)
+    amount_entry.pack(pady=5)
+
+    error_lbl = ttk.Label(popup, text="", foreground="red")
+    error_lbl.pack(pady=5)
+
+    def save_payment():
+        try:
+            date_str = date_entry.get()
+            date = datetime.strptime(date_str, "%m/%d/%Y")
+            day = date.day
+            description = desc_entry.get()
+            amount = float(amount_entry.get())
+
+            calendar_widget.add_payment(day, description, amount)
+            popup.destroy()
+        except ValueError as e:
+            error_lbl.config(text=f"Error: {e}")
+
+    ttk.Button(popup, text="Add Payment", bootstyle=SUCCESS, command=save_payment).pack(pady=20)
+
+ttk.Button(calendar_tab, text="Add Payment", bootstyle=SUCCESS, command=add_payment_popup).pack(pady=10)
+
+
+# Keywords for categorizing expenses
 keywords = {
     "Dining Out": [
         "restaurant", "cafe", "bistro", "diner", "eatery", "bar", "grill", "deli", "pizza", "sushi", "burger", "taco", "steakhouse", "pub",
@@ -63,7 +196,7 @@ keywords = {
         "movie", "cinema", "theater", "concert", "show", "event", "ticket", "festival", "amusement park", "theme park", "museum", "exhibit",
         "gallery", "club", "nightclub", "bar", "pub", "game", "sports", "match", "play", "opera", "ballet", "circus", "streaming", "netflix",
         "hulu", "spotify", "apple music", "amazon prime", "disney+", "concert", "broadway", "Regal", "AMC", "Ba", "Palace", "Carrol's Place",
-        "The Box", "gentlemens club"
+        "The Box"
     ],
     "Utilities": [
         "electricity", "water", "gas", "sewer", "trash", "recycling", "internet", "cable", "satellite", "phone", "mobile", "cell", "bill",
@@ -72,7 +205,7 @@ keywords = {
     "Subscriptions": [
         "subscription", "membership", "service", "streaming", "netflix", "hulu", "amazon prime", "disney+", "spotify", "apple music",
         "magazine", "newspaper", "gym", "club", "box", "kit", "meal plan", "software", "app", "siriusxm", "adobe", "microsoft office",
-        "cloud storage", "new york times", "washington post", "subcripti", "onlyfans"
+        "cloud storage", "new york times", "washington post", "subcripti"
     ],
     "Education": [
         "tuition", "school", "college", "university", "course", "class", "lesson", "workshop", "seminar", "textbook", "book", "lab fee",
@@ -91,7 +224,6 @@ keywords = {
         "toys", "games", "hobbies", "books", "music", "movies", "video games", "software", "ikea", "best buy", "home depot", "lowe's", "Amzn", "Marketplace",
         "Duane Reade", "CVS"
     ],
-    # Add more categories and keywords as needed
 }
 
 def categorize_expense(description):
@@ -99,7 +231,6 @@ def categorize_expense(description):
         if any(keyword in description.lower() for keyword in kw_list):
             return category
     return "Miscellaneous"
-
 
 # Define average limits for categories and suggestions
 average_limits = {
@@ -130,7 +261,6 @@ average_limits = {
     "Bank Fees": 10,
     "Debt Repayment": 100,
     "Investments": 100,
-    # Add more limits as needed
 }
 
 savings_suggestions = {
@@ -161,13 +291,12 @@ savings_suggestions = {
     "Bank Fees": "Avoid unnecessary bank fees by maintaining minimum balances, using in-network ATMs, and choosing accounts with no monthly fees.",
     "Debt Repayment": "Prioritize paying off high-interest debt first. Consider debt consolidation to reduce interest rates and simplify payments.",
     "Investments": "Minimize investment fees by choosing low-cost index funds or ETFs. Avoid frequent trading to reduce transaction costs.",
-    # Add more categories as needed
 }
 
-# Initialize DataFrames to store expenses, income, and income distribution
+# Initialize DataFrames to store expenses, income, and asset allocation
 expense_df = pd.DataFrame(columns=["Date", "Description", "Category", "Amount"])
 income_df = pd.DataFrame(columns=["Date", "Description", "Category", "Amount", "Recurring"])
-distribution_df = pd.DataFrame(columns=["Paycheck", "Category", "Amount"])
+distribution_df = pd.DataFrame(columns=["Paycheck", "Category", "Amount", "InterestRate"])
 
 # Expenses Tab
 expense_columns = ("Date", "Description", "Category", "Amount")
@@ -229,7 +358,7 @@ def add_expense():
         expense_date_entry.delete(0, tk.END)
         expense_description_entry.delete(0, tk.END)
         expense_category_entry.set("")
-        expense_amount_entry.delete(0, expense_amount_entry.delete(0, tk.END))
+        expense_amount_entry.delete(0, tk.END)
 
         # Recalculate financial statements and savings suggestions each time an expense is added
         update_financial_statements()
@@ -248,9 +377,10 @@ def extract_text_from_pdf(pdf_path):
             text += page.extract_text()
     pattern = r'(\d{2}/\d{2})\s([A-Z]+[\w*\s-]+)\s(\d+\.\d{2})'
     matches = re.findall(pattern, text)
-    return matches
+    current_year = datetime.now().year
+    return [(f"{date}/{current_year}", desc, amount) for date, desc, amount in matches]
 
-# Function to import expenses from CSV
+# Function to import expenses from PDF
 def import_expenses():
     global expense_df
     file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
@@ -407,10 +537,10 @@ def handle_recurring_income():
 
 handle_recurring_income()
 
-# Income Distribution Tab
+# Asset Allocation Tab
 def show_distribution_popup():
     popup = ttkb.Toplevel(root)
-    popup.title("Add Income Distribution")
+    popup.title("Add Asset Allocation")
     popup.geometry("400x800")
 
     selected_paycheck = income_df["Description"].unique().tolist()
@@ -461,7 +591,7 @@ def show_distribution_popup():
         entry.bind("<KeyRelease>", lambda event: update_balance())
         expense_entries.append(entry)
 
-    # Income Distribution
+    # Asset Allocation
     distribution_frame = ttk.Frame(popup)
     distribution_frame.pack(fill='x', padx=10, pady=10)
 
@@ -510,9 +640,9 @@ def show_distribution_popup():
     save_button = ttk.Button(popup, text="Save Distribution", bootstyle=SUCCESS, command=save_distribution)
     save_button.pack(pady=20)
 
-ttk.Button(income_distribution_tab, text="Add Distribution", bootstyle=SUCCESS, command=show_distribution_popup).pack(pady=10)
+ttk.Button(asset_allocation_tab, text="Add Distribution", bootstyle=SUCCESS, command=show_distribution_popup).pack(pady=10)
 
-distribution_tree = ttk.Treeview(income_distribution_tab, columns=("Paycheck", "Category", "Amount", "InterestRate"), show='headings')
+distribution_tree = ttk.Treeview(asset_allocation_tab, columns=("Paycheck", "Category", "Amount", "InterestRate"), show='headings')
 distribution_tree.heading("Paycheck", text="Paycheck")
 distribution_tree.heading("Category", text="Category")
 distribution_tree.heading("Amount", text="Amount")
@@ -523,67 +653,55 @@ for col in ("Paycheck", "Category", "Amount", "InterestRate"):
 
 distribution_tree.pack(expand=1, fill='both', padx=10, pady=10)
 
-# Function to export income distribution to CSV
+# Function to export asset allocation to CSV
 def export_income_distribution():
     file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
     if file_path:
         distribution_df.to_csv(file_path, index=False)
 
-export_distribution_button = ttk.Button(income_distribution_tab, text="Export Distribution", bootstyle=INFO, command=export_income_distribution)
+export_distribution_button = ttk.Button(asset_allocation_tab, text="Export Distribution", bootstyle=INFO, command=export_income_distribution)
 export_distribution_button.pack(side="left", padx=10, pady=10)
 
-# Financial Planning Tab
-financial_plan_canvas = tk.Canvas(financial_plan_tab)
-financial_plan_scrollbar = ttk.Scrollbar(financial_plan_tab, orient="vertical", command=financial_plan_canvas.yview)
-financial_plan_scrollable_frame = ttk.Frame(financial_plan_canvas)
+# Analytics Tab (centered and scrollable)
+analytics_canvas = tk.Canvas(analytics_tab)
+analytics_scrollbar = ttk.Scrollbar(analytics_tab, orient="vertical", command=analytics_canvas.yview)
+scrollable_analytics_frame = ttk.Frame(analytics_canvas)
 
-financial_plan_scrollable_frame.bind(
+scrollable_analytics_frame.bind(
     "<Configure>",
-    lambda e: financial_plan_canvas.configure(
-        scrollregion=financial_plan_canvas.bbox("all")
+    lambda e: analytics_canvas.configure(
+        scrollregion=analytics_canvas.bbox("all")
     )
 )
 
-financial_plan_canvas.create_window((0, 0), window=financial_plan_scrollable_frame, anchor="nw")
-financial_plan_canvas.configure(yscrollcommand=financial_plan_scrollbar.set)
+analytics_canvas.create_window((0, 0), window=scrollable_analytics_frame, anchor="nw")
+analytics_canvas.configure(yscrollcommand=analytics_scrollbar.set)
 
-financial_plan_canvas.pack(side="left", fill="both", expand=True)
-financial_plan_scrollbar.pack(side="right", fill="y")
+analytics_canvas.pack(side="left", fill="both", expand=True)
+analytics_scrollbar.pack(side="right", fill="y")
 
-financial_plan_frame = ttk.Frame(financial_plan_scrollable_frame)
-financial_plan_frame.pack(expand=1, fill='both', padx=70, pady=10)  # Increased padx for more centering
+analytics_frame = ttk.Frame(scrollable_analytics_frame)
+analytics_frame.pack(expand=1, fill='both', padx=10, pady=10)
 
 # Add section title
-ttk.Label(financial_plan_frame, text="Financial Planning", font=("Arial", 14, "bold")).pack(pady=10)
-
-# Create a frame for the financial statements and pie chart
-statements_frame = ttk.Frame(financial_plan_frame)
-statements_frame.pack(expand=1, fill='both', padx=10, pady=10)
+ttk.Label(analytics_frame, text="Analytics", font=("Arial", 14, "bold")).pack(pady=10)
 
 # Create frames for each financial statement and chart
-balance_sheet_container = ttk.Frame(statements_frame)
-balance_sheet_container.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-income_statement_container = ttk.Frame(statements_frame)
-income_statement_container.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
-predicted_wealth_container = ttk.Frame(statements_frame)
-predicted_wealth_container.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
-expense_pie_chart_container = ttk.Frame(statements_frame)
-expense_pie_chart_container.grid(row=2, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
-scatter_plot_container = ttk.Frame(statements_frame)
-scatter_plot_container.grid(row=3, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
+top_frame = ttk.Frame(analytics_frame)
+top_frame.pack(padx=10, pady=10, fill='x')
 
-# Goals section to the right
-goals_frame = ttk.Frame(statements_frame)
-goals_frame.grid(row=0, column=2, rowspan=4, padx=10, pady=10, sticky="nsew")
+balance_sheet_container = ttk.Frame(top_frame)
+balance_sheet_container.pack(side='left', padx=10, pady=10, fill='both', expand=True)
+income_statement_container = ttk.Frame(top_frame)
+income_statement_container.pack(side='left', padx=10, pady=10, fill='both', expand=True)
 
-# Make the columns and rows expand proportionally
-statements_frame.columnconfigure(0, weight=1)
-statements_frame.columnconfigure(1, weight=1)
-statements_frame.columnconfigure(2, weight=1)
-statements_frame.rowconfigure(0, weight=1)
-statements_frame.rowconfigure(1, weight=1)
-statements_frame.rowconfigure(2, weight=1)
-statements_frame.rowconfigure(3, weight=1)
+predicted_wealth_container = ttk.Frame(analytics_frame)
+predicted_wealth_container.pack(padx=10, pady=10, fill='x')
+expense_pie_chart_container = ttk.Frame(analytics_frame)
+expense_pie_chart_container.pack(padx=10, pady=10, fill='x')
+scatter_plot_container = ttk.Frame(analytics_frame)
+scatter_plot_container.pack(padx=10, pady=10, fill='x')
+
 
 # Function to update financial statements
 def update_financial_statements():
@@ -640,7 +758,7 @@ def update_financial_statements():
         income_statement_tree.insert("", "end", values=list(row))
     income_statement_tree.pack(expand=1, fill='both')
 
-        # Predicted Wealth Line Graph
+    # Predicted Wealth Line Graph
     def calculate_predicted_wealth():
         # Calculate total principal
         principal = sum(distribution_df["Amount"])
@@ -693,7 +811,6 @@ def update_financial_statements():
     canvas.get_tk_widget().pack(expand=1, fill='both')
     canvas.draw()
 
-
     # Expense Pie Chart
     if not expense_df.empty:
         category_expense = expense_df.groupby("Category")["Amount"].sum()
@@ -729,21 +846,8 @@ def update_financial_statements():
         canvas.get_tk_widget().pack(expand=1, fill='both')
         canvas.draw()
 
-
-# Call update_financial_statements initially to populate the financial planning tab
+# Call update_financial_statements initially to populate the analytics tab
 update_financial_statements()
-
-# Ensure expenses without a year are assumed to belong to the current year
-def extract_text_from_pdf(pdf_path):
-    text = ""
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            text += page.extract_text()
-    pattern = r'(\d{2}/\d{2})\s([A-Z]+[\w*\s-]+)\s(\d+\.\d{2})'
-    matches = re.findall(pattern, text)
-    current_year = datetime.now().year
-    return [(f"{date}/{current_year}", desc, amount) for date, desc, amount in matches]
-
 
 # Savings Tab Layout
 ttk.Label(savings_tab, text="Savings Suggestions", font=("Arial", 14, "bold")).pack(pady=10)
