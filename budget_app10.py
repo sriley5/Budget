@@ -205,7 +205,7 @@ keywords = {
     "Subscriptions": [
         "subscription", "membership", "service", "streaming", "netflix", "hulu", "amazon prime", "disney+", "spotify", "apple music",
         "magazine", "newspaper", "gym", "club", "box", "kit", "meal plan", "software", "app", "siriusxm", "adobe", "microsoft office",
-        "cloud storage", "new york times", "washington post", "subcripti"
+        "cloud storage", "new york times", "washington post", "subcripti", "onlyfans"
     ],
     "Education": [
         "tuition", "school", "college", "university", "course", "class", "lesson", "workshop", "seminar", "textbook", "book", "lab fee",
