@@ -190,13 +190,13 @@ keywords = {
     "Fitness": [
         "gym", "fitness", "workout", "exercise", "yoga", "pilates", "crossfit", "zumba", "spin class", "personal trainer", "membership",
         "health club", "sports", "athletic", "run", "jog", "swim", "bike", "hike", "climb", "martial arts", "boxing", "kickboxing", "gym pass",
-        "planet fitness", "24 hour fitness", "la fitness", "equinox", "gold's gym"
+        "planet fitness", "24 hour fitness", "la fitness", "equinox", "gold's gym", "ymca", "cryo"
     ],
     "Entertainment": [
         "movie", "cinema", "theater", "concert", "show", "event", "ticket", "festival", "amusement park", "theme park", "museum", "exhibit",
         "gallery", "club", "nightclub", "bar", "pub", "game", "sports", "match", "play", "opera", "ballet", "circus", "streaming", "netflix",
         "hulu", "spotify", "apple music", "amazon prime", "disney+", "concert", "broadway", "Regal", "AMC", "Ba", "Palace", "Carrol's Place",
-        "The Box"
+        "The Box", "comedy"
     ],
     "Utilities": [
         "electricity", "water", "gas", "sewer", "trash", "recycling", "internet", "cable", "satellite", "phone", "mobile", "cell", "bill",
