@@ -979,7 +979,6 @@ def import_portfolio_pdf():
             for page in pdf.pages:
                 text = page.extract_text()
                 if text:
-                    # Adjusted regex pattern to match your PDF's structure
                     pattern = r'([\w\s]+)\s+([\w\d]+)\s+([\w\s]+)\s+([\d\.]+)\s+\$([\d,]+\.\d+)\s+\$([\d,]+\.\d+)\s+\$([\d,]+\.\d+)\s+(\d+\.\d+)%'
                     matches = re.findall(pattern, text)
                     if matches:
@@ -1001,8 +1000,6 @@ def import_portfolio_pdf():
                 else:
                     print(f"Could not extract text from page: {page.page_number}")
         create_investment_summary_ui(investments_tab, investment_summary_df)
-
-ttk.Button(investments_tab, text="Import Portfolio PDF", bootstyle=SUCCESS, command=import_portfolio_pdf).pack(pady=10)
 
 def create_investment_summary_ui(parent, asset_df):
     parent.update_idletasks()
@@ -1029,24 +1026,28 @@ def create_investment_summary_ui(parent, asset_df):
     canvas.pack(side="left", fill="both", expand=True)
     scrollbar.pack(side="right", fill="y")
 
-    # Calculate total investment and category breakdown
-    total_investment = asset_df["Market Value"].sum()
-    category_breakdown = asset_df.groupby('Name')['Market Value'].sum()
-    category_percentage = (category_breakdown / total_investment) * 100
-
-    # Display summary
+    # Create a frame for the overall summary
     summary_frame = ttk.Frame(scrollable_frame)
-    summary_frame.pack(fill='both', expand=True, padx=10, pady=10)
+    summary_frame.pack(fill='x', expand=True, padx=10, pady=10)
 
-    ttk.Label(summary_frame, text=f"Total Investment: ${total_investment:.2f}", font=("Arial", 14)).pack(pady=5)
+    total_investment = asset_df["Market Value"].sum()
+    unrealized_gains = asset_df["Market Value"].sum() - (asset_df["Quantity"] * asset_df["Price"]).sum()
+
+    # Display overall summary
+    ttk.Label(summary_frame, text=f"Total Holding Market Value: ${total_investment:.2f}", font=("Arial", 8, "bold")).grid(row=0, column=0, padx=5, pady=5, sticky='w')
+    ttk.Label(summary_frame, text=f"Unrealized Gains/Losses: ${unrealized_gains:.2f}", font=("Arial", 8)).grid(row=0, column=2, padx=5, pady=5, sticky='w')
+
+    # Portfolio Table
+    table_frame = ttk.Frame(scrollable_frame)
+    table_frame.pack(fill='x', expand=True, padx=10, pady=10)
 
     columns = ["Name", "Ticker", "Account Type", "Quantity", "Price", "Market Value", "Est. Dividend Yield", "% of Total Portfolio"]
-    tree = ttk.Treeview(summary_frame, columns=columns, show='headings')
+    tree = ttk.Treeview(table_frame, columns=columns, show='headings')
     tree.pack(fill='both', expand=True)
 
     for col in columns:
         tree.heading(col, text=col, anchor='center')
-        tree.column(col, anchor='center', width=150)
+        tree.column(col, anchor='center', width=100)
 
     for idx, row in asset_df.iterrows():
         tree.insert('', 'end', values=(
@@ -1060,21 +1061,10 @@ def create_investment_summary_ui(parent, asset_df):
             row["% of Total Portfolio"]
         ))
 
-    # Plotting the pie chart for category breakdown
-    fig, ax = plt.subplots(figsize=(10, 5))
-    wedges, texts, autotexts = ax.pie(category_breakdown, labels=category_breakdown.index, autopct='%1.1f%%', startangle=90, textprops=dict(color="w"))
-
-    ax.legend(wedges, category_breakdown.index, title="Categories", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-    plt.setp(autotexts, size=10, weight="bold")
-    ax.set_title("Investment Breakdown by Category", fontsize=14)
-
-    canvas_pie = FigureCanvasTkAgg(fig, master=summary_frame)
-    canvas_pie.get_tk_widget().pack(fill='both', expand=True)
-    canvas_pie.draw()
-
-    # Adding Investment Summary and Grade
+    # Investor Score and Risk Score
     diversification_index = calculate_diversification_index(asset_df)
     risk_adjusted_return = calculate_risk_adjusted_return(asset_df)
+    investor_score = calculate_investor_score(asset_df)
 
     summary = f"""
     Investment Summary:
@@ -1083,19 +1073,26 @@ def create_investment_summary_ui(parent, asset_df):
     - Average Yield: {asset_df['Est. Dividend Yield'].mean():.2f}%
     - Portfolio Diversification Index: {diversification_index:.2f}
     - Risk-Adjusted Return: {risk_adjusted_return:.2f}
-    - Average Price: ${asset_df['Price'].mean():.2f}
-    - Total Quantity: {asset_df['Quantity'].sum():.2f}
+    - Investor Score: {investor_score}
     """
 
-    grade = calculate_investment_grade(asset_df)
-    grade_label = ttk.Label(summary_frame, text=f"Investment Grade: {grade}", font=("Arial", 14, "bold"))
-    grade_label.pack(pady=5)
+    ttk.Label(summary_frame, text=summary, font=("Arial", 8)).grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky='w')
 
-    summary_label = ttk.Label(summary_frame, text=summary, font=("Arial", 12))
-    summary_label.pack(pady=5)
+    # Charts
+    plot_investment_summary(asset_df, scrollable_frame)
 
-def calculate_investment_grade(asset_df):
-    # Improved investment grade calculation logic
+def calculate_diversification_index(asset_df):
+    # Improved diversification index calculation
+    return 1 / (asset_df['Market Value'].std() / asset_df['Market Value'].mean())
+
+def calculate_risk_adjusted_return(asset_df):
+    # Improved risk-adjusted return calculation
+    average_return = asset_df['Est. Dividend Yield'].mean()
+    risk = asset_df['Market Value'].std()
+    return average_return / risk if risk != 0 else 0
+
+def calculate_investor_score(asset_df):
+    # Example calculation for investor score
     total_yield = asset_df["Est. Dividend Yield"].mean()
     diversification_index = calculate_diversification_index(asset_df)
     risk_adjusted_return = calculate_risk_adjusted_return(asset_df)
@@ -1109,50 +1106,46 @@ def calculate_investment_grade(asset_df):
     else:
         return "D"
 
-def calculate_diversification_index(asset_df):
-    # Improved diversification index calculation
-    return 1 / (asset_df['Market Value'].std() / asset_df['Market Value'].mean())
-
-def calculate_risk_adjusted_return(asset_df):
-    # Improved risk-adjusted return calculation
-    average_return = asset_df['Est. Dividend Yield'].mean()
-    risk = asset_df['Market Value'].std()
-    return average_return / risk if risk != 0 else 0
-
 def plot_investment_summary(asset_df, parent):
-    fig, axs = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axs = plt.subplots(2, 2, figsize=(8, 6))  # Smaller figure size and 2x2 layout
+    fig.subplots_adjust(hspace=0.5, wspace=0.5)
 
     # Pie Chart for Investment Breakdown
     category_breakdown = asset_df.groupby('Name')['Market Value'].sum()
-    category_breakdown.plot(kind='pie', ax=axs[0, 0], autopct='%1.1f%%', startangle=90, fontsize=10)
-    axs[0, 0].set_title('Investment Breakdown by Category', fontsize=14)
-    axs[0, 0].set_ylabel('')
+    wedges, texts, autotexts = axs[0, 0].pie(category_breakdown, autopct='%1.1f%%', startangle=90, textprops={'fontsize': 5})
+    axs[0, 0].set_title('Investment Breakdown by Category', fontsize=7)  # Smaller title font size
+    axs[0, 0].legend(wedges, category_breakdown.index, title="Categories", loc="center left", bbox_to_anchor=(-0.4, 0.5), fontsize=5)
 
     # Bar Chart for Market Value by Asset
     sns.barplot(x='Market Value', y='Name', data=asset_df, ax=axs[0, 1])
-    axs[0, 1].set_title('Market Value by Asset', fontsize=14)
-    axs[0, 1].set_xlabel('Market Value ($)', fontsize=12)
-    axs[0, 1].set_ylabel('Asset', fontsize=12)
+    axs[0, 1].set_title('Market Value by Asset', fontsize=7)  # Smaller title font size
+    axs[0, 1].set_xlabel('Market Value ($)', fontsize=5)  # Smaller label font size
+    axs[0, 1].set_ylabel('Asset', fontsize=5)  # Smaller label font size
+    axs[0, 1].legend([],[], frameon=False)  # Remove legend
 
     # Scatter Plot for Quantity vs. Price
-    sns.scatterplot(x='Price', y='Quantity', hue='Name', size='Market Value', sizes=(20, 200), data=asset_df, ax=axs[1, 0])
-    axs[1, 0].set_title('Quantity vs. Price', fontsize=14)
-    axs[1, 0].set_xlabel('Price ($)', fontsize=12)
-    axs[1, 0].set_ylabel('Quantity', fontsize=12)
+    sns.scatterplot(x='Price', y='Quantity', hue='Name', size='Market Value', sizes=(20, 100), data=asset_df, ax=axs[1, 0])
+    axs[1, 0].set_title('Quantity vs. Price', fontsize=7)  # Smaller title font size
+    axs[1, 0].set_xlabel('Price ($)', fontsize=5)  # Smaller label font size
+    axs[1, 0].set_ylabel('Quantity', fontsize=5)  # Smaller label font size
+    axs[1, 0].legend(fontsize=5, loc="center left", bbox_to_anchor=(-0.4, 0.5))  # Smaller legend font size
 
     # Line Plot for Market Value over Time
-    asset_df['Date'] = pd.to_datetime(asset_df['Date'])
-    asset_df.sort_values(by='Date', inplace=True)
-    sns.lineplot(x='Date', y='Market Value', hue='Name', data=asset_df, ax=axs[1, 1])
-    axs[1, 1].set_title('Market Value Over Time', fontsize=14)
-    axs[1, 1].set_xlabel('Date', fontsize=12)
-    axs[1, 1].set_ylabel('Market Value ($)', fontsize=12)
-
-    plt.tight_layout()
+    if 'Date' in asset_df.columns:
+        asset_df['Date'] = pd.to_datetime(asset_df['Date'])
+        asset_df.sort_values(by='Date', inplace=True)
+        sns.lineplot(x='Date', y='Market Value', hue='Name', data=asset_df, ax=axs[1, 1])
+        axs[1, 1].set_title('Market Value Over Time', fontsize=7)  # Smaller title font size
+        axs[1, 1].set_xlabel('Date', fontsize=5)  # Smaller label font size
+        axs[1, 1].set_ylabel('Market Value ($)', fontsize=5)  # Smaller label font size
+        axs[1, 1].tick_params(axis='x', rotation=45)  # Rotate x-axis labels for better fit
+        axs[1, 1].legend(fontsize=5, loc="center left", bbox_to_anchor=(-0.4, 0.5))  # Smaller legend font size
+    
     canvas = FigureCanvasTkAgg(fig, master=parent)
     canvas.get_tk_widget().pack(fill='both', expand=True)
     canvas.draw()
 
-# Start the main loop
-root.mainloop()
+# Add the button to import PDF in the investments tab
+ttk.Button(investments_tab, text="Import Portfolio PDF", command=import_portfolio_pdf).pack(pady=10)
 
+root.mainloop()
