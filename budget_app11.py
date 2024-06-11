@@ -11,6 +11,8 @@ import pdfplumber
 import re
 import calendar
 import seaborn as sns
+import numpy as np
+import yfinance as yf
 
 # Initialize the main window with ttkbootstrap style
 root = ttkb.Window(themename="cosmo")
@@ -971,6 +973,8 @@ def create_investment_summary_ui(parent, asset_df):
     
     summary_tree.pack(expand=1, fill='both')
 
+investment_summary_df = pd.DataFrame()
+
 def import_portfolio_pdf():
     global investment_summary_df
     file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
@@ -1034,14 +1038,32 @@ def create_investment_summary_ui(parent, asset_df):
     unrealized_gains = asset_df["Market Value"].sum() - (asset_df["Quantity"] * asset_df["Price"]).sum()
 
     # Display overall summary
-    ttk.Label(summary_frame, text=f"Total Holding Market Value: ${total_investment:.2f}", font=("Arial", 8, "bold")).grid(row=0, column=0, padx=5, pady=5, sticky='w')
-    ttk.Label(summary_frame, text=f"Unrealized Gains/Losses: ${unrealized_gains:.2f}", font=("Arial", 8)).grid(row=0, column=2, padx=5, pady=5, sticky='w')
+    summary_font = ("Arial", 12, "bold")
+    ttk.Label(summary_frame, text="Investment Summary", font=summary_font).grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky='w')
+
+    details = f"""
+    Total Holding Market Value: ${total_investment:.2f}
+    Unrealized Gains/Losses: ${unrealized_gains:.2f}
+    Average Yield: {asset_df['Est. Dividend Yield'].mean():.2f}%
+    Portfolio Diversification Index: {calculate_diversification_index(asset_df):.2f}
+    Risk-Adjusted Return: {calculate_risk_adjusted_return(asset_df):.2f}
+    Beta: {calculate_beta(asset_df, fetch_historical_data(asset_df)):.2f}
+    Standard Deviation: {calculate_portfolio_sd(fetch_historical_data(asset_df)):.2f}
+    Sharpe Ratio: {calculate_sharpe_ratio(asset_df, fetch_historical_data(asset_df)):.2f}
+    Alpha: {calculate_alpha(asset_df, fetch_historical_data(asset_df)):.2f}
+    Investor Score: {calculate_investor_score(asset_df, calculate_beta(asset_df, fetch_historical_data(asset_df)), calculate_sharpe_ratio(asset_df, fetch_historical_data(asset_df)), calculate_alpha(asset_df, fetch_historical_data(asset_df)), calculate_diversification_index(asset_df), calculate_risk_adjusted_return(asset_df))}
+    """
+    ttk.Label(summary_frame, text=details, font=("Arial", 10)).grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky='w')
+
+    # Suggestions based on analysis
+    suggestions = generate_suggestions(calculate_investor_score(asset_df, calculate_beta(asset_df, fetch_historical_data(asset_df)), calculate_sharpe_ratio(asset_df, fetch_historical_data(asset_df)), calculate_alpha(asset_df, fetch_historical_data(asset_df)), calculate_diversification_index(asset_df), calculate_risk_adjusted_return(asset_df)))
+    ttk.Label(summary_frame, text=f"Suggestions: {suggestions}", font=("Arial", 12, "bold")).grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky='w')
 
     # Portfolio Table
     table_frame = ttk.Frame(scrollable_frame)
     table_frame.pack(fill='x', expand=True, padx=10, pady=10)
 
-    columns = ["Name", "Ticker", "Account Type", "Quantity", "Price", "Market Value", "Est. Dividend Yield", "% of Total Portfolio"]
+    columns = ["Ticker", "Account Type", "Quantity", "Price", "Market Value", "Est. Dividend Yield", "% of Total Portfolio"]
     tree = ttk.Treeview(table_frame, columns=columns, show='headings')
     tree.pack(fill='both', expand=True)
 
@@ -1051,7 +1073,6 @@ def create_investment_summary_ui(parent, asset_df):
 
     for idx, row in asset_df.iterrows():
         tree.insert('', 'end', values=(
-            row["Name"],
             row["Ticker"],
             row["Account Type"],
             row["Quantity"],
@@ -1061,89 +1082,105 @@ def create_investment_summary_ui(parent, asset_df):
             row["% of Total Portfolio"]
         ))
 
-    # Investor Score and Risk Score
-    diversification_index = calculate_diversification_index(asset_df)
-    risk_adjusted_return = calculate_risk_adjusted_return(asset_df)
-    investor_score = calculate_investor_score(asset_df)
-
-    summary = f"""
-    Investment Summary:
-    - Total Investment: ${total_investment:.2f}
-    - Number of Assets: {len(asset_df)}
-    - Average Yield: {asset_df['Est. Dividend Yield'].mean():.2f}%
-    - Portfolio Diversification Index: {diversification_index:.2f}
-    - Risk-Adjusted Return: {risk_adjusted_return:.2f}
-    - Investor Score: {investor_score}
-    """
-
-    ttk.Label(summary_frame, text=summary, font=("Arial", 8)).grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky='w')
-
     # Charts
-    plot_investment_summary(asset_df, scrollable_frame)
+    plot_investment_summary(asset_df, fetch_historical_data(asset_df), scrollable_frame)
+
+def fetch_historical_data(asset_df):
+    historical_data = {}
+    for ticker in asset_df['Ticker']:
+        stock_data = yf.download(ticker, period="1y")
+        historical_data[ticker] = stock_data['Adj Close']
+    return pd.DataFrame(historical_data)
 
 def calculate_diversification_index(asset_df):
-    # Improved diversification index calculation
     return 1 / (asset_df['Market Value'].std() / asset_df['Market Value'].mean())
 
 def calculate_risk_adjusted_return(asset_df):
-    # Improved risk-adjusted return calculation
     average_return = asset_df['Est. Dividend Yield'].mean()
     risk = asset_df['Market Value'].std()
     return average_return / risk if risk != 0 else 0
 
-def calculate_investor_score(asset_df):
-    # Example calculation for investor score
-    total_yield = asset_df["Est. Dividend Yield"].mean()
-    diversification_index = calculate_diversification_index(asset_df)
-    risk_adjusted_return = calculate_risk_adjusted_return(asset_df)
-
-    if total_yield >= 5 and diversification_index >= 0.5 and risk_adjusted_return >= 1:
+def calculate_investor_score(asset_df, beta, sharpe_ratio, alpha, diversification_index, risk_adjusted_return):
+    score = (
+        (asset_df['Est. Dividend Yield'].mean() >= 2) +
+        (beta <= 1.2) +
+        (sharpe_ratio >= 1) +
+        (alpha > 0) +
+        (diversification_index >= 0.5) +
+        (risk_adjusted_return >= 0.5)
+    )
+    if score >= 5:
         return "A"
-    elif total_yield >= 3 and diversification_index >= 0.3 and risk_adjusted_return >= 0.5:
+    elif score >= 4:
         return "B"
-    elif total_yield >= 1 and diversification_index >= 0.1 and risk_adjusted_return >= 0.2:
+    elif score >= 3:
         return "C"
     else:
         return "D"
 
-def plot_investment_summary(asset_df, parent):
-    fig, axs = plt.subplots(2, 2, figsize=(8, 6))  # Smaller figure size and 2x2 layout
+def calculate_beta(asset_df, historical_data, market_ticker='^GSPC'):
+    market_data = yf.download(market_ticker, period="1y")['Adj Close']
+    market_returns = market_data.pct_change().dropna()
+    portfolio_returns = historical_data.pct_change().dropna().mean(axis=1)
+    covariance = np.cov(portfolio_returns, market_returns)[0, 1]
+    beta = covariance / market_returns.var()
+    return beta
+
+def calculate_portfolio_sd(historical_data):
+    portfolio_returns = historical_data.pct_change().dropna().mean(axis=1)
+    return portfolio_returns.std() * np.sqrt(252)
+
+def calculate_sharpe_ratio(asset_df, historical_data, risk_free_rate=0.02):
+    portfolio_returns = historical_data.pct_change().dropna().mean(axis=1)
+    average_return = portfolio_returns.mean() * 252
+    portfolio_sd = portfolio_returns.std() * np.sqrt(252)
+    return (average_return - risk_free_rate) / portfolio_sd
+
+def calculate_alpha(asset_df, historical_data, benchmark_return=0.10, risk_free_rate=0.02, market_ticker='^GSPC'):
+    market_data = yf.download(market_ticker, period="1y")['Adj Close']
+    market_returns = market_data.pct_change().dropna().mean() * 252
+    portfolio_returns = historical_data.pct_change().dropna().mean(axis=1)
+    average_return = portfolio_returns.mean() * 252
+    beta = calculate_beta(asset_df, historical_data)
+    alpha = average_return - (risk_free_rate + beta * (market_returns - risk_free_rate))
+    return alpha
+
+def plot_investment_summary(asset_df, historical_data, parent):
+    fig, axs = plt.subplots(3, 1, figsize=(8, 20))  # Adjust figure size and layout
     fig.subplots_adjust(hspace=0.5, wspace=0.5)
 
     # Pie Chart for Investment Breakdown
     category_breakdown = asset_df.groupby('Name')['Market Value'].sum()
-    wedges, texts, autotexts = axs[0, 0].pie(category_breakdown, autopct='%1.1f%%', startangle=90, textprops={'fontsize': 5})
-    axs[0, 0].set_title('Investment Breakdown by Category', fontsize=7)  # Smaller title font size
-    axs[0, 0].legend(wedges, category_breakdown.index, title="Categories", loc="center left", bbox_to_anchor=(-0.4, 0.5), fontsize=5)
+    wedges, texts, autotexts = axs[0].pie(category_breakdown, autopct='%1.1f%%', startangle=90, textprops={'fontsize': 8})
+    axs[0].set_title('Investment Breakdown by Category', fontsize=10)  # Smaller title font size
+    axs[0].legend(wedges, category_breakdown.index, title="Categories", loc="center left", bbox_to_anchor=(-0.6, 0.5), fontsize=8)  # Move legend more to the left
 
     # Bar Chart for Market Value by Asset
-    sns.barplot(x='Market Value', y='Name', data=asset_df, ax=axs[0, 1])
-    axs[0, 1].set_title('Market Value by Asset', fontsize=7)  # Smaller title font size
-    axs[0, 1].set_xlabel('Market Value ($)', fontsize=5)  # Smaller label font size
-    axs[0, 1].set_ylabel('Asset', fontsize=5)  # Smaller label font size
-    axs[0, 1].legend([],[], frameon=False)  # Remove legend
+    sns.barplot(x='Market Value', y='Name', data=asset_df, ax=axs[1])
+    axs[1].set_title('Market Value by Asset', fontsize=10)  # Smaller title font size
+    axs[1].set_xlabel('Market Value ($)', fontsize=8)  # Smaller label font size
+    axs[1].set_ylabel('Asset', fontsize=8)  # Smaller label font size
+    axs[1].tick_params(axis='both', labelsize=6)  # Make all fonts smaller for the bar graph
 
-    # Scatter Plot for Quantity vs. Price
-    sns.scatterplot(x='Price', y='Quantity', hue='Name', size='Market Value', sizes=(20, 100), data=asset_df, ax=axs[1, 0])
-    axs[1, 0].set_title('Quantity vs. Price', fontsize=7)  # Smaller title font size
-    axs[1, 0].set_xlabel('Price ($)', fontsize=5)  # Smaller label font size
-    axs[1, 0].set_ylabel('Quantity', fontsize=5)  # Smaller label font size
-    axs[1, 0].legend(fontsize=5, loc="center left", bbox_to_anchor=(-0.4, 0.5))  # Smaller legend font size
+    # Line Plot for Historical Performance of the Portfolio
+    historical_data['Total Portfolio'] = historical_data.mean(axis=1)
+    historical_data.plot(ax=axs[2])
+    axs[2].set_title('Historical Performance of the Portfolio', fontsize=10)  # Smaller title font size
+    axs[2].set_xlabel('Date', fontsize=8)  # Smaller label font size
+    axs[2].set_ylabel('Price ($)', fontsize=8)  # Smaller label font size
 
-    # Line Plot for Market Value over Time
-    if 'Date' in asset_df.columns:
-        asset_df['Date'] = pd.to_datetime(asset_df['Date'])
-        asset_df.sort_values(by='Date', inplace=True)
-        sns.lineplot(x='Date', y='Market Value', hue='Name', data=asset_df, ax=axs[1, 1])
-        axs[1, 1].set_title('Market Value Over Time', fontsize=7)  # Smaller title font size
-        axs[1, 1].set_xlabel('Date', fontsize=5)  # Smaller label font size
-        axs[1, 1].set_ylabel('Market Value ($)', fontsize=5)  # Smaller label font size
-        axs[1, 1].tick_params(axis='x', rotation=45)  # Rotate x-axis labels for better fit
-        axs[1, 1].legend(fontsize=5, loc="center left", bbox_to_anchor=(-0.4, 0.5))  # Smaller legend font size
-    
     canvas = FigureCanvasTkAgg(fig, master=parent)
     canvas.get_tk_widget().pack(fill='both', expand=True)
     canvas.draw()
+
+def generate_suggestions(investor_score):
+    suggestions = {
+        "A": "Your portfolio is performing well. Consider maintaining your current strategy.",
+        "B": "Your portfolio is doing well. Review areas for potential improvement, such as increasing diversification or evaluating high-risk assets.",
+        "C": "There is room for improvement. Consider diversifying your investments, reducing high-risk assets, and focusing on stable returns.",
+        "D": "Your portfolio may be underperforming. Evaluate your strategy and consider seeking professional advice. Focus on diversification and risk management."
+    }
+    return suggestions.get(investor_score, "No suggestions available.")
 
 # Add the button to import PDF in the investments tab
 ttk.Button(investments_tab, text="Import Portfolio PDF", command=import_portfolio_pdf).pack(pady=10)
