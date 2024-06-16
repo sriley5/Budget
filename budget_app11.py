@@ -23,7 +23,7 @@ root.geometry("1200x800")
 notebook = ttk.Notebook(root)
 notebook.pack(expand=1, fill='both')
 
-# Create tabs
+# Create main tabs
 expense_tab = ttk.Frame(notebook)
 income_tab = ttk.Frame(notebook)
 asset_allocation_tab = ttk.Frame(notebook)
@@ -35,6 +35,17 @@ notebook.add(income_tab, text="Income")
 notebook.add(asset_allocation_tab, text="Asset Allocation")
 notebook.add(financial_plan_tab, text="Financial Planning")
 notebook.add(savings_tab, text="Savings Suggestions")
+
+# Create a secondary notebook within the Expenses tab
+expense_notebook = ttk.Notebook(expense_tab)
+expense_notebook.pack(expand=1, fill='both')
+
+# Create the sub-tabs within the expense notebook
+manage_expenses_tab = ttk.Frame(expense_notebook)
+expense_tracking_tab = ttk.Frame(expense_notebook)
+
+expense_notebook.add(manage_expenses_tab, text="Manage Expenses")
+expense_notebook.add(expense_tracking_tab, text="Expense Tracking")
 
 # Add sub-tabs within the Financial Planning tab
 financial_plan_notebook = ttk.Notebook(financial_plan_tab)
@@ -300,9 +311,9 @@ expense_df = pd.DataFrame(columns=["Date", "Description", "Category", "Amount"])
 income_df = pd.DataFrame(columns=["Date", "Description", "Category", "Amount", "Recurring"])
 distribution_df = pd.DataFrame(columns=["Paycheck", "Category", "Amount", "InterestRate"])
 
-# Expenses Tab
+# Manage Expenses Tab
 expense_columns = ("Date", "Description", "Category", "Amount")
-expense_tree = ttk.Treeview(expense_tab, columns=expense_columns, show='headings')
+expense_tree = ttk.Treeview(manage_expenses_tab, columns=expense_columns, show='headings')
 expense_tree.heading("Date", text="Date")
 expense_tree.heading("Description", text="Description")
 expense_tree.heading("Category", text="Category")
@@ -313,7 +324,7 @@ for col in expense_columns:
 
 expense_tree.pack(expand=1, fill='both')
 
-expense_entry_frame = ttk.Frame(expense_tab)
+expense_entry_frame = ttk.Frame(manage_expenses_tab)
 expense_entry_frame.pack(fill='x', padx=10, pady=10)
 
 expense_date_entry = ttk.Entry(expense_entry_frame)
@@ -426,11 +437,117 @@ def refresh_expense_treeview():
     for _, row in expense_df.iterrows():
         expense_tree.insert("", "end", values=(row["Date"].strftime('%Y-%m-%d') if not pd.isna(row["Date"]) else "", row["Description"], row["Category"], row["Amount"]))
 
-import_expenses_button = ttk.Button(expense_tab, text="Import Expenses", bootstyle=INFO, command=import_expenses)
+import_expenses_button = ttk.Button(manage_expenses_tab, text="Import Expenses", bootstyle=INFO, command=import_expenses)
 import_expenses_button.pack(side="left", padx=10, pady=10)
 
-export_expenses_button = ttk.Button(expense_tab, text="Export Expenses", bootstyle=INFO, command=export_expenses)
+export_expenses_button = ttk.Button(manage_expenses_tab, text="Export Expenses", bootstyle=INFO, command=export_expenses)
 export_expenses_button.pack(side="left", padx=10, pady=10)
+
+# Expense Tracking Tab
+progress_bars = {}
+current_month = datetime.now().month
+current_year = datetime.now().year
+
+def update_progress_bars():
+    for category in average_limits.keys():
+        total_spent = expense_df[(expense_df["Category"] == category) & (expense_df["Date"].dt.month == current_month) & (expense_df["Date"].dt.year == current_year)]["Amount"].sum()
+        limit = average_limits[category]
+        progress_bars[category]["value"] = (total_spent / limit) * 100
+        progress_bars[category].label.config(text=f"{category}: ${total_spent:.2f} / ${limit:.2f}")
+
+def create_progress_bar(category):
+    frame = ttk.Frame(scrollable_frame)
+    frame.pack(fill='x', padx=10, pady=5)
+    
+    label = ttk.Label(frame, text=f"{category}: $0.00 / ${average_limits[category]:.2f}")
+    label.pack(side='left')
+    
+    progress = ttk.Progressbar(frame, orient='horizontal', length=1000, mode='determinate', style="TProgressbar")
+    progress.pack(side='right', fill='x', expand=True)
+    progress.label = label
+    progress_bars[category] = progress
+    
+    frame.update()
+
+# Custom progress bar style
+style = ttkb.Style()
+style.configure("TProgressbar", thickness=20)
+
+# Make the expense tracking tab scrollable
+canvas = tk.Canvas(expense_tracking_tab)
+scrollbar = ttk.Scrollbar(expense_tracking_tab, orient="vertical", command=canvas.yview)
+scrollable_frame = ttk.Frame(canvas)
+
+scrollable_frame.bind(
+    "<Configure>",
+    lambda e: canvas.configure(
+        scrollregion=canvas.bbox("all")
+    )
+)
+
+canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+canvas.configure(yscrollcommand=scrollbar.set)
+
+canvas.pack(side="left", fill="both", expand=True)
+scrollbar.pack(side="right", fill="y")
+
+# Add month selector
+month_selector_frame = ttk.Frame(scrollable_frame)
+month_selector_frame.pack(fill='x', padx=10, pady=5)
+
+ttk.Label(month_selector_frame, text="Select Month:").pack(side='left')
+
+month_selector = ttk.Combobox(month_selector_frame, values=[datetime(current_year, m, 1).strftime("%B %Y") for m in range(1, 13)])
+month_selector.current(current_month - 1)
+month_selector.pack(side='left')
+
+def update_month():
+    global current_month, current_year
+    selected_date = datetime.strptime(month_selector.get(), "%B %Y")
+    current_month = selected_date.month
+    current_year = selected_date.year
+    update_progress_bars()
+
+month_selector.bind("<<ComboboxSelected>>", lambda event: update_month())
+
+for category in average_limits.keys():
+    create_progress_bar(category)
+
+# Edit Budget Popup
+def edit_budget_popup():
+    popup = ttkb.Toplevel(root)
+    popup.title("Edit Budget")
+    popup.geometry("400x600")
+    
+    for category in average_limits.keys():
+        frame = ttk.Frame(popup)
+        frame.pack(fill='x', padx=10, pady=5)
+        
+        label = ttk.Label(frame, text=category)
+        label.pack(side='left')
+        
+        entry = ttk.Entry(frame)
+        entry.insert(0, average_limits[category])
+        entry.pack(side='right')
+        
+        def save_new_limit(category=category, entry=entry):
+            try:
+                new_limit = float(entry.get())
+                average_limits[category] = new_limit
+                update_progress_bars()
+                refresh_expense_treeview()
+            except ValueError:
+                pass
+        
+        save_button = ttk.Button(frame, text="Save", command=save_new_limit)
+        save_button.pack(side='right', padx=5)
+
+ttk.Button(scrollable_frame, text="Edit Budget", bootstyle=SUCCESS, command=edit_budget_popup).pack(pady=10)
+
+# Function to update financial statements
+def update_financial_statements():
+    handle_recurring_income()
+    update_progress_bars()
 
 # Income Tab
 income_columns = ("Date", "Description", "Category", "Amount", "Recurring")
@@ -978,32 +1095,43 @@ investment_summary_df = pd.DataFrame()
 def import_portfolio_pdf():
     global investment_summary_df
     file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
+    print(f"Selected file: {file_path}")  # Debug print
+
     if file_path:
-        with pdfplumber.open(file_path) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text()
-                if text:
-                    pattern = r'([\w\s]+)\s+([\w\d]+)\s+([\w\s]+)\s+([\d\.]+)\s+\$([\d,]+\.\d+)\s+\$([\d,]+\.\d+)\s+\$([\d,]+\.\d+)\s+(\d+\.\d+)%'
-                    matches = re.findall(pattern, text)
-                    if matches:
-                        for match in matches:
-                            name, ticker, account_type, quantity, price, market_value, est_div_yield, percent_total = match
-                            market_value = float(market_value.replace(",", ""))
-                            investment_summary_df = pd.concat([investment_summary_df, pd.DataFrame({
-                                "Name": [name],
-                                "Ticker": [ticker],
-                                "Account Type": [account_type],
-                                "Quantity": [float(quantity)],
-                                "Price": [float(price.replace(",", ""))],
-                                "Market Value": [market_value],
-                                "Est. Dividend Yield": [float(est_div_yield.replace(",", ""))],
-                                "% of Total Portfolio": [float(percent_total)]
-                            })], ignore_index=True)
+        try:
+            with pdfplumber.open(file_path) as pdf:
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    print(f"Text on page {page.page_number}: {text}")  # Debug print
+                    if text:
+                        pattern = r'([\w\s]+)\s+([\w\d]+)\s+([\w\s]+)\s+([\d\.]+)\s+\$([\d,]+\.\d+)\s+\$([\d,]+\.\d+)\s+\$([\d,]+\.\d+)\s+(\d+\.\d+)%'
+                        matches = re.findall(pattern, text)
+                        print(f"Matches found on page {page.page_number}: {matches}")  # Debug print
+
+                        if matches:
+                            for match in matches:
+                                name, ticker, account_type, quantity, price, market_value, est_div_yield, percent_total = match
+                                market_value = float(market_value.replace(",", ""))
+                                investment_summary_df = pd.concat([investment_summary_df, pd.DataFrame({
+                                    "Name": [name],
+                                    "Ticker": [ticker],
+                                    "Account Type": [account_type],
+                                    "Quantity": [float(quantity)],
+                                    "Price": [float(price.replace(",", ""))],
+                                    "Market Value": [market_value],
+                                    "Est. Dividend Yield": [float(est_div_yield.replace(",", ""))],
+                                    "% of Total Portfolio": [float(percent_total)]
+                                })], ignore_index=True)
+                        else:
+                            print(f"No matches found on page: {page.page_number}")
                     else:
-                        print(f"No matches found on page: {page.page_number}")
-                else:
-                    print(f"Could not extract text from page: {page.page_number}")
+                        print(f"Could not extract text from page: {page.page_number}")
+        except Exception as e:
+            print(f"Error processing PDF: {e}")
+        
         create_investment_summary_ui(investments_tab, investment_summary_df)
+    else:
+        print("No file selected")
 
 def create_investment_summary_ui(parent, asset_df):
     parent.update_idletasks()
@@ -1121,25 +1249,34 @@ def calculate_investor_score(asset_df, beta, sharpe_ratio, alpha, diversificatio
 def calculate_beta(asset_df, historical_data, market_ticker='^GSPC'):
     market_data = yf.download(market_ticker, period="1y")['Adj Close']
     market_returns = market_data.pct_change().dropna()
-    portfolio_returns = historical_data.pct_change().dropna().mean(axis=1)
-    covariance = np.cov(portfolio_returns, market_returns)[0, 1]
-    beta = covariance / market_returns.var()
+
+    # Align the dates of market returns and portfolio returns
+    portfolio_returns = historical_data.pct_change(fill_method=None).dropna().mean(axis=1)
+    aligned_portfolio_returns = portfolio_returns.reindex(market_returns.index).dropna()
+    aligned_market_returns = market_returns.reindex(aligned_portfolio_returns.index)
+
+    # Re-check the lengths to ensure they are the same
+    if len(aligned_portfolio_returns) != len(aligned_market_returns):
+        raise ValueError("The lengths of aligned portfolio returns and market returns do not match.")
+
+    covariance = np.cov(aligned_portfolio_returns, aligned_market_returns)[0, 1]
+    beta = covariance / aligned_market_returns.var()
     return beta
 
 def calculate_portfolio_sd(historical_data):
-    portfolio_returns = historical_data.pct_change().dropna().mean(axis=1)
+    portfolio_returns = historical_data.pct_change(fill_method=None).dropna().mean(axis=1)
     return portfolio_returns.std() * np.sqrt(252)
 
 def calculate_sharpe_ratio(asset_df, historical_data, risk_free_rate=0.02):
-    portfolio_returns = historical_data.pct_change().dropna().mean(axis=1)
+    portfolio_returns = historical_data.pct_change(fill_method=None).dropna().mean(axis=1)
     average_return = portfolio_returns.mean() * 252
     portfolio_sd = portfolio_returns.std() * np.sqrt(252)
     return (average_return - risk_free_rate) / portfolio_sd
 
 def calculate_alpha(asset_df, historical_data, benchmark_return=0.10, risk_free_rate=0.02, market_ticker='^GSPC'):
     market_data = yf.download(market_ticker, period="1y")['Adj Close']
-    market_returns = market_data.pct_change().dropna().mean() * 252
-    portfolio_returns = historical_data.pct_change().dropna().mean(axis=1)
+    market_returns = market_data.pct_change(fill_method=None).dropna().mean() * 252
+    portfolio_returns = historical_data.pct_change(fill_method=None).dropna().mean(axis=1)
     average_return = portfolio_returns.mean() * 252
     beta = calculate_beta(asset_df, historical_data)
     alpha = average_return - (risk_free_rate + beta * (market_returns - risk_free_rate))
