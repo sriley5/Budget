@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from datetime import datetime, timedelta
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -13,15 +13,220 @@ import calendar
 import seaborn as sns
 import numpy as np
 import yfinance as yf
+import sqlite3
+import json
+import ttkbootstrap as ttkb
+from ttkbootstrap.constants import *
+import os
+from customtkinter import *
+import threading
+import time
+
+# Get the directory of the current script
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Define the database path
+db_path = os.path.join(script_dir, 'user_sessions.db')
 
 # Initialize the main window with ttkbootstrap style
 root = ttkb.Window(themename="cosmo")
 root.title("Personal Finance Manager")
 root.geometry("1200x800")
 
+# Function to save data and end session
+def save_and_end_session(): 
+    save_data()  # Ensure data is saved
+    messagebox.showinfo("Session Saved", "Your session has been saved.")
+    root.destroy()  # Close the application
+
+# Create a frame to hold the notebook and the button
+top_frame = ttk.Frame(root)
+top_frame.pack(fill='x')
+
+# Create the notebook (tabbed interface)
+notebook = ttk.Notebook(top_frame)
+notebook.grid(row=0, column=0, sticky='w')
+
+# Add the "Save and End Session" button to the same row as the notebook tabs
+end_session_button = ttkb.Button(top_frame, text="Save and End Session", bootstyle="danger", command=save_and_end_session)
+end_session_button.grid(row=0, column=1, sticky='e', padx=10, pady=10)
+
+# Ensure the notebook expands to fill available space
+top_frame.grid_columnconfigure(0, weight=1)
+
+current_user_id = None
+
+# Initialize DataFrames globally to store data
+expense_df = pd.DataFrame(columns=["Date", "Description", "Category", "Amount"])
+income_df = pd.DataFrame(columns=["Date", "Description", "Category", "Amount"])
+
+# Database functions
+def create_database():
+    print(f"Creating database at {db_path}...")
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sessions (
+            user_id TEXT PRIMARY KEY,
+            data TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    print("Database created successfully.")
+
+def user_exists(user_id):
+    print(f"Checking if user_id exists: {user_id}")
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute('SELECT user_id FROM sessions WHERE user_id = ?', (user_id,))
+    exists = cursor.fetchone() is not None
+    conn.close()
+    print(f"User exists: {exists}")
+    return exists
+
+def save_session(user_id, data):
+    print(f"Saving session for user_id: {user_id}")
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute('REPLACE INTO sessions (user_id, data) VALUES (?, ?)', (user_id, data))
+    conn.commit()
+    conn.close()
+    print("Session saved successfully.")
+
+def load_last_session(user_id):
+    print(f"Loading session for user_id: {user_id}")
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute('SELECT data FROM sessions WHERE user_id = ?', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    print(f"Loaded data: {row}")
+    return row[0] if row else None
+
+def continue_session_popup():
+    popup = tk.Toplevel(root)
+    popup.title("Continue Session")
+    popup.geometry("300x200")
+
+    label = tk.Label(popup, text="Enter User ID:", font=("Arial", 14))
+    label.pack(pady=10)
+
+    continue_user_id_entry = tk.Entry(popup, font=("Arial", 14))
+    continue_user_id_entry.pack(pady=10)
+
+    def load_continue_session():
+        global current_user_id
+        user_id = continue_user_id_entry.get().strip()
+        if not user_id:
+            messagebox.showerror("Error", "User ID cannot be empty.")
+            return
+        if not user_exists(user_id):
+            messagebox.showerror("Error", "User ID does not exist.")
+            return
+        current_user_id = user_id
+        last_session = load_last_session(user_id)
+        print(f"Session data to load: {last_session}")
+        if last_session:
+            session_data = json.loads(last_session)
+            load_data(session_data)
+            messagebox.showinfo("Continue Session", f"Previous session for User ID: {user_id} loaded successfully.")
+            popup.destroy()
+            show_main_app()
+        else:
+            messagebox.showinfo("Continue Session", f"No previous session found for User ID: {user_id}.")
+            popup.destroy()
+
+    continue_button = ttkb.Button(popup, text="Continue", command=load_continue_session, bootstyle="primary")
+    continue_button.pack(pady=20)
+
+def new_session_popup():
+    popup = tk.Toplevel(root)
+    popup.title("Create New User ID")
+    popup.geometry("300x200")
+
+    label = tk.Label(popup, text="Enter New User ID:", font=("Arial", 14))
+    label.pack(pady=10)
+
+    new_user_id_entry = tk.Entry(popup, font=("Arial", 14))
+    new_user_id_entry.pack(pady=10)
+
+    def create_new_user():
+        global current_user_id
+        new_user_id = new_user_id_entry.get().strip()
+        if not new_user_id:
+            messagebox.showerror("Error", "User ID cannot be empty.")
+            return
+        if user_exists(new_user_id):
+            messagebox.showerror("Error", "User ID already exists. Please choose a different ID.")
+            return
+        current_user_id = new_user_id
+        save_session(new_user_id, json.dumps({'expenses': [], 'income': []}))
+        popup.destroy()
+        messagebox.showinfo("New Session", f"Starting a new session for User ID: {new_user_id}")
+        show_main_app()
+
+    create_button = ttkb.Button(popup, text="Create", command=create_new_user, bootstyle="success")
+    create_button.pack(pady=20)
+
+def on_continue():
+    continue_session_popup()
+
+def show_main_app():
+    welcome_frame.destroy()
+    notebook.pack(expand=1, fill='both')
+
+def load_data(data):
+    global expense_df, income_df
+    print(f"Loading data into DataFrames: {data}")
+    
+    # Ensure the expense DataFrame has the correct structure
+    expense_df = pd.DataFrame(data.get('expenses', []))
+    if not expense_df.empty:
+        expense_df['Date'] = pd.to_datetime(expense_df['Date'], errors='coerce')
+    else:
+        expense_df = pd.DataFrame(columns=["Date", "Description", "Category", "Amount"])
+    
+    # Ensure the income DataFrame has the correct structure
+    income_df = pd.DataFrame(data.get('income', []))
+    if not income_df.empty:
+        income_df['Date'] = pd.to_datetime(income_df['Date'], errors='coerce')
+    else:
+        income_df = pd.DataFrame(columns=["Date", "Description", "Category", "Amount"])
+    
+    print(f"Expense DataFrame: {expense_df}")
+    print(f"Income DataFrame: {income_df}")
+    refresh_expense_treeview()
+
+def save_data():
+    data = {
+        'expenses': expense_df.assign(Date=expense_df['Date'].astype(str)).to_dict(orient='records'),
+        'income': income_df.assign(Date=income_df['Date'].astype(str)).to_dict(orient='records'),
+    }
+    print(f"Data to save: {data}")
+    save_session(current_user_id, json.dumps(data))
+
+# Create the welcome screen
+create_database()
+
+welcome_frame = tk.Frame(root)
+welcome_frame.pack(expand=True, fill='both')
+
+welcome_label = tk.Label(welcome_frame, text="Welcome to AICH", font=("Arial", 24))
+welcome_label.pack(pady=20)
+
+button_frame = tk.Frame(welcome_frame)
+button_frame.pack(pady=20)
+
+continue_button = ttkb.Button(button_frame, text="Continue Session", command=on_continue, bootstyle="primary")
+continue_button.pack(side='left', padx=20)
+
+new_button = ttkb.Button(button_frame, text="New Session", command=new_session_popup, bootstyle="success")
+new_button.pack(side='right', padx=20)
+
 # Create the notebook (tabbed interface)
 notebook = ttk.Notebook(root)
-notebook.pack(expand=1, fill='both')
+notebook.pack_forget()  # Initially hide the notebook
 
 # Create main tabs
 expense_tab = ttk.Frame(notebook)
@@ -71,9 +276,38 @@ class CustomCalendar(ttk.Frame):
         self.year = datetime.now().year
         self.month = datetime.now().month
         self.payments = {}
+        self.init_db()
+        self.load_payments()
         self.build_calendar()
 
+    def init_db(self):
+        # Initialize the database connection and create table if it doesn't exist
+        self.conn = sqlite3.connect('payments.db')
+        self.cursor = self.conn.cursor()
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS payments (
+                id INTEGER PRIMARY KEY,
+                year INTEGER,
+                month INTEGER,
+                day INTEGER,
+                description TEXT,
+                amount REAL
+            )
+        ''')
+        self.conn.commit()
+
+    def load_payments(self):
+        # Load payments from the database
+        self.cursor.execute('SELECT year, month, day, description, amount FROM payments')
+        rows = self.cursor.fetchall()
+        for row in rows:
+            year, month, day, description, amount = row
+            if (year, month, day) not in self.payments:
+                self.payments[(year, month, day)] = []
+            self.payments[(year, month, day)].append({"description": description, "amount": amount})
+
     def build_calendar(self):
+        # Build the calendar (same as before)
         for widget in self.winfo_children():
             widget.destroy()
         header = ttk.Frame(self)
@@ -112,8 +346,13 @@ class CustomCalendar(ttk.Frame):
                     if (self.year, self.month, day) in self.payments:
                         payments = self.payments[(self.year, self.month, day)]
                         for payment in payments:
-                            payment_lbl = ttk.Label(day_frame, text=f"{payment['description']}\n${payment['amount']}", font=("Arial", 16), foreground='blue')
-                            payment_lbl.pack(anchor='center')
+                            self.create_bubble(day_frame, payment['description'], payment['amount'])
+
+    def create_bubble(self, parent, description, amount):
+        canvas = tk.Canvas(parent, width=100, height=50)
+        canvas.pack(anchor='center')
+        canvas.create_oval(10, 10, 90, 40, fill='lightblue')
+        canvas.create_text(50, 25, text=f"{description}\n${amount}", font=("Arial", 12), fill='blue')
 
     def prev_month(self):
         self.month -= 1
@@ -133,15 +372,18 @@ class CustomCalendar(ttk.Frame):
         if (self.year, self.month, day) not in self.payments:
             self.payments[(self.year, self.month, day)] = []
         self.payments[(self.year, self.month, day)].append({"description": description, "amount": amount})
+        self.save_payment_to_db(self.year, self.month, day, description, amount)
         self.build_calendar()
 
-# Add custom calendar widget to calendar tab
-calendar_widget = CustomCalendar(calendar_tab)
-calendar_widget.pack(expand=1, fill='both')
+    def save_payment_to_db(self, year, month, day, description, amount):
+        self.cursor.execute('''
+            INSERT INTO payments (year, month, day, description, amount)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (year, month, day, description, amount))
+        self.conn.commit()
 
-# Add payment feature
-def add_payment_popup():
-    popup = ttkb.Toplevel(root)
+def add_payment_popup(calendar_widget):
+    popup = tk.Toplevel(root)
     popup.title("Add Payment")
     popup.geometry("400x300")
 
@@ -173,9 +415,13 @@ def add_payment_popup():
         except ValueError as e:
             error_lbl.config(text=f"Error: {e}")
 
-    ttk.Button(popup, text="Add Payment", bootstyle=SUCCESS, command=save_payment).pack(pady=20)
+    ttk.Button(popup, text="Add Payment", command=save_payment).pack(pady=20)
 
-ttk.Button(calendar_tab, text="Add Payment", bootstyle=SUCCESS, command=add_payment_popup).pack(pady=10)
+# Add the calendar widget to the calendar tab
+calendar_widget = CustomCalendar(calendar_tab)
+calendar_widget.pack(expand=1, fill='both')
+
+ttk.Button(calendar_tab, text="Add Payment", command=lambda: add_payment_popup(calendar_widget)).pack(pady=10)
 
 # Keywords for categorizing expenses
 keywords = {
@@ -342,6 +588,13 @@ ttk.Label(expense_entry_frame, text="Description:").grid(row=1, column=0, sticky
 ttk.Label(expense_entry_frame, text="Category:").grid(row=2, column=0, sticky='e')
 ttk.Label(expense_entry_frame, text="Amount:").grid(row=3, column=0, sticky='e')
 
+def refresh_expense_treeview():
+    print("Refreshing expense treeview...")
+    for item in expense_tree.get_children():
+        expense_tree.delete(item)
+    for _, row in expense_df.iterrows():
+        expense_tree.insert("", "end", values=(row["Date"], row["Description"], row["Category"], row["Amount"]))
+
 def add_expense():
     global expense_df
     try:
@@ -363,17 +616,15 @@ def add_expense():
         })
 
         expense_df = pd.concat([expense_df, new_expense], ignore_index=True)
-        # Ensure Date column is in datetime format
-        expense_df["Date"] = pd.to_datetime(expense_df["Date"], errors='coerce')
-        
-        expense_tree.insert("", "end", values=(date_value.strftime('%Y-%m-%d'), description_value, category_value, amount_value))
+        refresh_expense_treeview()
+        save_data()  # Ensure data is saved after adding an expense
+        print("Expense added successfully")
 
         expense_date_entry.delete(0, tk.END)
         expense_description_entry.delete(0, tk.END)
         expense_category_entry.set("")
         expense_amount_entry.delete(0, tk.END)
 
-        # Recalculate financial statements and savings suggestions each time an expense is added
         update_financial_statements()
         calculate_savings_suggestions()
 
@@ -780,6 +1031,7 @@ def export_income_distribution():
 
 export_distribution_button = ttk.Button(asset_allocation_tab, text="Export Distribution", bootstyle=INFO, command=export_income_distribution)
 export_distribution_button.pack(side="left", padx=10, pady=10)
+
 
 # Analytics Tab (centered and scrollable)
 analytics_canvas = tk.Canvas(analytics_tab)
